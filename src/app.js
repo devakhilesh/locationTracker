@@ -46,7 +46,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Employee sends updated location
+  // Employee sends updated location every 3 seconds
   socket.on('updateLocation', (location) => {
     if (employees[socket.id]) {
       employees[socket.id].location = location;
@@ -57,10 +57,16 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Boss sends their location
+  // Boss sends their location every 3 seconds
   socket.on('bossLocationUpdate', (location) => {
     if (boss) {
       boss.location = location;
+      // Send boss location to all active employees
+      Object.keys(employees).forEach((employeeId) => {
+        if (employees[employeeId].active) {
+          io.to(employeeId).emit('bossLocationUpdate', { id: boss.id, location });
+        }
+      });
     }
   });
 
@@ -75,7 +81,7 @@ io.on('connection', (socket) => {
     }
   });
 });
- 
+
 // Start the server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

@@ -43,51 +43,17 @@
       // Display boss location
       bossLocationElement.textContent = `Lat: ${lat}, Lng: ${lng}`;
 
-      // Send boss location to the server
-      socket.emit('bossLocationUpdate', { lat, lng });
-
-      // Update or create boss marker on the map
+      // Update boss marker on the map
       if (bossMarker) {
         bossMarker.setLatLng([lat, lng]);
       } else {
-        bossMarker = L.marker([lat, lng]).addTo(map).bindPopup('Boss Location').openPopup();
-        map.setView([lat, lng], 13);
+        bossMarker = L.marker([lat, lng]).addTo(map).bindPopup('You are the Boss!').openPopup();
+        map.setView([lat, lng], 13); // Center the map to the boss's location
       }
+
+      // Send updated location to the server
+      socket.emit('bossLocationUpdate', { lat, lng });
     }
-
-    // Listen for active employees and add them to the map
-    socket.on('activeEmployee', (data) => {
-      const { id, location } = data;
-
-      // Display employee info in the list
-      let employeeItem = document.getElementById(id);
-      if (!employeeItem) {
-        employeeItem = document.createElement('li');
-        employeeItem.id = id;
-        employeeListElement.appendChild(employeeItem);
-      }
-      employeeItem.textContent = `Employee ${id}: Lat: ${location.lat}, Lng: ${location.lng}`;
-
-      // Add or update employee marker
-      if (employeeMarkers[id]) {
-        employeeMarkers[id].setLatLng([location.lat, location.lng]);
-      } else {
-        employeeMarkers[id] = L.marker([location.lat, location.lng])
-          .addTo(map)
-          .bindPopup(`Employee ${id}`)
-          .openPopup();
-      }
-    });
-
-    // Listen for real-time employee location updates
-    socket.on('employeeLocationUpdate', (data) => {
-      const { id, location } = data;
-
-      // Update employee marker position on the map
-      if (employeeMarkers[id]) {
-        employeeMarkers[id].setLatLng([location.lat, location.lng]).update();
-      }
-    });
 
     // Get boss's geolocation
     if (navigator.geolocation) {
@@ -100,6 +66,44 @@
 
     // Boss joins the session
     socket.emit('bossJoin');
+
+    // Receive active employees and update the list
+    socket.on('activeEmployee', (data) => {
+      const employeeId = data.id;
+      const { lat, lng } = data.location;
+
+      // Add employee to the list
+      if (!employeeMarkers[employeeId]) {
+        const li = document.createElement('li');
+        li.textContent = `Employee ${employeeId}`;
+        employeeListElement.appendChild(li);
+        // Add marker for the employee
+        employeeMarkers[employeeId] = L.marker([lat, lng])
+          .addTo(map)
+          .bindPopup(`Employee ${employeeId}`).openPopup();
+      }
+    });
+
+    // Receive location updates from active employees
+    socket.on('employeeLocationUpdate', (data) => {
+      const employeeId = data.id;
+      const { lat, lng } = data.location;
+
+      // Update employee marker
+      if (employeeMarkers[employeeId]) {
+        employeeMarkers[employeeId].setLatLng([lat, lng]);
+      }
+    });
+
+    // Send boss location every 3 seconds
+    setInterval(() => {
+      if (bossMarker) {
+        navigator.geolocation.getCurrentPosition((position) => {
+          const { latitude, longitude } = position.coords;
+          updateBossLocation({ coords: { latitude, longitude } });
+        });
+      }
+    }, 3000);
   </script>
 </body>
 </html>
