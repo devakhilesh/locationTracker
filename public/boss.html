@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Boss Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <style>
+    #map {
+      height: 400px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <h1>Boss Interface</h1>
+  <p>Your Location: <span id="bossLocation">Fetching...</span></p>
+  <div id="map"></div>
+  <h3>Active Employees:</h3>
+  <ul id="employeeList"></ul>
+
+  <script>
+    const socket = io.connect();
+    const bossLocationElement = document.getElementById('bossLocation');
+    const employeeListElement = document.getElementById('employeeList');
+
+    // Initialize the map and set the default view
+    const map = L.map('map').setView([51.505, -0.09], 13); // Default map center
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    let bossMarker;
+    let employeeMarkers = {};
+
+    // Handle boss location update
+    function updateBossLocation(position) {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+
+      // Display boss location
+      bossLocationElement.textContent = `Lat: ${lat}, Lng: ${lng}`;
+
+      // Send boss location to the server
+      socket.emit('bossLocationUpdate', { lat, lng });
+
+      // Update or create boss marker on the map
+      if (bossMarker) {
+        bossMarker.setLatLng([lat, lng]);
+      } else {
+        bossMarker = L.marker([lat, lng]).addTo(map).bindPopup('Boss Location').openPopup();
+        map.setView([lat, lng], 13);
+      }
+    }
+
+    // Listen for active employees and add them to the map
+    socket.on('activeEmployee', (data) => {
+      const { id, location } = data;
+
+      // Display employee info in the list
+      let employeeItem = document.getElementById(id);
+      if (!employeeItem) {
+        employeeItem = document.createElement('li');
+        employeeItem.id = id;
+        employeeListElement.appendChild(employeeItem);
+      }
+      employeeItem.textContent = `Employee ${id}: Lat: ${location.lat}, Lng: ${location.lng}`;
+
+      // Add or update employee marker
+      if (employeeMarkers[id]) {
+        employeeMarkers[id].setLatLng([location.lat, location.lng]);
+      } else {
+        employeeMarkers[id] = L.marker([location.lat, location.lng])
+          .addTo(map)
+          .bindPopup(`Employee ${id}`)
+          .openPopup();
+      }
+    });
+
+    // Listen for real-time employee location updates
+    socket.on('employeeLocationUpdate', (data) => {
+      const { id, location } = data;
+
+      // Update employee marker position on the map
+      if (employeeMarkers[id]) {
+        employeeMarkers[id].setLatLng([location.lat, location.lng]).update();
+      }
+    });
+
+    // Get boss's geolocation
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(updateBossLocation, (err) => {
+        console.error('Geolocation error:', err);
+      });
+    } else {
+      alert('Geolocation is not supported by this browser.');
+    }
+
+    // Boss joins the session
+    socket.emit('bossJoin');
+  </script>
+</body>
+</html>
